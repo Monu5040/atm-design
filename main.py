@@ -1,243 +1,257 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-
-# --- Domain Classes ---
+# --- Account & Card Classes ---
 
 class BankAccount:
-    def __init__(self, balance: int) -> None:
-        self._balance = balance
+    def __init__(self, balance: int):
+        self.balance = balance
 
     def get_balance(self) -> int:
-        return self._balance
+        return self.balance
 
     def update_balance(self, amount: int) -> None:
-        self._balance += amount
+        self.balance += amount
 
 
 class ATMCard:
-    def __init__(self, cvv: int, pin: int, bank_account: BankAccount) -> None:
-        self._cvv = cvv
-        self._pin = pin
-        self._bank_account = bank_account
+    def __init__(self, cvv: int, pin: int, account: BankAccount):
+        self.cvv = cvv
+        self.pin = pin
+        self.account = account
 
     def get_pin(self) -> int:
-        return self._pin
+        return self.pin
 
     def get_account(self) -> BankAccount:
-        return self._bank_account
+        return self.account
 
 
 class User:
-    def __init__(self, name: str, card: ATMCard) -> None:
+    def __init__(self, name: str, card: ATMCard):
         self.name = name
-        self._card = card
+        self.card = card
 
     def get_card(self) -> ATMCard:
-        return self._card
+        return self.card
 
 
-# --- State Pattern ---
-
-class ATM:  # forward declaration for type hinting
-    ...
-
+# --- ATM State Pattern ---
 
 class ATMState(ABC):
     @abstractmethod
-    def insert_card(self, atm: "ATM") -> None: pass
+    def insert_card(self, atm: 'ATM') -> None: pass
 
     @abstractmethod
-    def authenticate_pin(self, atm: "ATM", pin: int) -> None: pass
+    def authenticate_pin(self, atm: 'ATM', pin: int) -> None: pass
 
     @abstractmethod
-    def check_balance(self, atm: "ATM") -> None: pass
+    def check_balance(self, atm: 'ATM') -> None: pass
 
     @abstractmethod
-    def cash_withdraw(self, atm: "ATM", amount: int) -> None: pass
+    def withdraw_cash(self, atm: 'ATM', amount: int) -> None: pass
 
     @abstractmethod
-    def eject_card(self, atm: "ATM") -> None: pass
+    def eject_card(self, atm: 'ATM') -> None: pass
 
 
 class IdleState(ATMState):
-    def insert_card(self, atm: "ATM") -> None:
+    def insert_card(self, atm: 'ATM') -> None:
         print("Card inserted")
         atm.set_state(atm.has_card_state)
 
-    def authenticate_pin(self, atm: "ATM", pin: int) -> None:
-        print("Please insert card first")
+    def authenticate_pin(self, atm: 'ATM', pin: int) -> None:
+        print("Insert card first")
 
-    def check_balance(self, atm: "ATM") -> None:
-        print("Please insert card first")
+    def check_balance(self, atm: 'ATM') -> None:
+        print("Insert card first")
 
-    def cash_withdraw(self, atm: "ATM", amount: int) -> None:
-        print("Please insert card first")
+    def withdraw_cash(self, atm: 'ATM', amount: int) -> None:
+        print("Insert card first")
 
-    def eject_card(self, atm: "ATM") -> None:
-        print("Please insert card first")
+    def eject_card(self, atm: 'ATM') -> None:
+        print("Insert card first")
 
 
 class HasCardState(ATMState):
-    def insert_card(self, atm: "ATM") -> None:
+    def insert_card(self, atm: 'ATM') -> None:
         print("Card already inserted")
 
-    def authenticate_pin(self, atm: "ATM", pin: int) -> None:
+    def authenticate_pin(self, atm: 'ATM', pin: int) -> None:
         if pin == atm.user.get_card().get_pin():
             print("PIN authenticated")
             atm.set_state(atm.cash_withdraw_state)
         else:
             print("Invalid PIN")
 
-    def check_balance(self, atm: "ATM") -> None:
+    def check_balance(self, atm: 'ATM') -> None:
         print("Authenticate PIN first")
 
-    def cash_withdraw(self, atm: "ATM", amount: int) -> None:
+    def withdraw_cash(self, atm: 'ATM', amount: int) -> None:
         print("Authenticate PIN first")
 
-    def eject_card(self, atm: "ATM") -> None:
+    def eject_card(self, atm: 'ATM') -> None:
         print("Card ejected")
         atm.set_state(atm.idle_state)
 
 
 class CashWithdrawState(ATMState):
-    def insert_card(self, atm: "ATM") -> None:
+    def insert_card(self, atm: 'ATM') -> None:
         print("Card already inserted")
 
-    def authenticate_pin(self, atm: "ATM", pin: int) -> None:
-        print("PIN already authenticated")
+    def authenticate_pin(self, atm: 'ATM', pin: int) -> None:
+        print("Already authenticated")
 
-    def check_balance(self, atm: "ATM") -> None:
-        balance = atm.user.get_card().get_account().get_balance()
-        print(f"Account balance: ₹{balance}")
+    def check_balance(self, atm: 'ATM') -> None:
+        acc = atm.user.get_card().get_account()
+        print(f"Balance: Rs. {acc.get_balance()}")
 
-    def cash_withdraw(self, atm: "ATM", amount: int) -> None:
-        if amount > atm.machine_balance:
+    def withdraw_cash(self, atm: 'ATM', amount: int) -> None:
+        acc = atm.user.get_card().get_account()
+        if amount > acc.get_balance():
+            print("Insufficient funds in account")
+        elif amount > atm.total_cash:
             print("Insufficient cash in ATM")
-        elif amount > atm.user.get_card().get_account().get_balance():
-            print("Insufficient balance in account")
         else:
-            atm.user.get_card().get_account().update_balance(-amount)
-            atm.machine_balance -= amount
-            print(f"Withdrawing ₹{amount}")
-            atm.handle_cash_dispense(amount)
+            atm.handle_cash(amount)
+            acc.update_balance(-amount)
+            atm.total_cash -= amount
+            print("Please collect your cash")
+            if atm.total_cash == 0:
+                atm.set_state(atm.out_of_cash_state)
+            else:
+                atm.set_state(atm.idle_state)
 
-    def eject_card(self, atm: "ATM") -> None:
+    def eject_card(self, atm: 'ATM') -> None:
         print("Card ejected")
         atm.set_state(atm.idle_state)
 
 
 class OutOfCashState(ATMState):
-    def insert_card(self, atm: "ATM") -> None:
-        print("ATM out of cash")
+    def insert_card(self, atm: 'ATM') -> None:
+        print("ATM out of service")
 
-    def authenticate_pin(self, atm: "ATM", pin: int) -> None:
-        print("ATM out of cash")
+    def authenticate_pin(self, atm: 'ATM', pin: int) -> None:
+        print("ATM out of service")
 
-    def check_balance(self, atm: "ATM") -> None:
-        print("ATM out of cash")
+    def check_balance(self, atm: 'ATM') -> None:
+        print("ATM out of service")
 
-    def cash_withdraw(self, atm: "ATM", amount: int) -> None:
-        print("ATM out of cash")
+    def withdraw_cash(self, atm: 'ATM', amount: int) -> None:
+        print("ATM out of service")
 
-    def eject_card(self, atm: "ATM") -> None:
-        print("ATM out of cash")
+    def eject_card(self, atm: 'ATM') -> None:
+        print("ATM out of service")
 
 
-# --- Chain of Responsibility ---
+# --- Cash Handler Chain (Chain of Responsibility) ---
 
-class CashWithdrawHandler(ABC):
-    def __init__(self, atm: "ATM", next_handler: Optional["CashWithdrawHandler"] = None) -> None:
-        self.atm = atm
+class CashHandler(ABC):
+    def __init__(self, next_handler: Optional['CashHandler'] = None):
         self.next_handler = next_handler
 
     @abstractmethod
-    def withdraw(self, amount: int) -> None: pass
+    def handle(self, amount: int, atm: 'ATM') -> None: pass
 
 
-class CashWithdrawHandler2K(CashWithdrawHandler):
-    def withdraw(self, amount: int) -> None:
-        count = min(amount // 2000, self.atm.notes_2k)
-        if count > 0:
-            print(f"Dispensing {count} notes of ₹2000")
-            self.atm.notes_2k -= count
-        amount -= count * 2000
+class CashHandler2K(CashHandler):
+    def handle(self, amount: int, atm: 'ATM') -> None:
+        notes = min(amount // 2000, atm.notes_2k)
+        if notes:
+            print(f"Dispensing {notes} notes of 2000")
+        amount -= notes * 2000
         if self.next_handler:
-            self.next_handler.withdraw(amount)
+            self.next_handler.handle(amount, atm)
 
 
-class CashWithdrawHandler500(CashWithdrawHandler):
-    def withdraw(self, amount: int) -> None:
-        count = min(amount // 500, self.atm.notes_500)
-        if count > 0:
-            print(f"Dispensing {count} notes of ₹500")
-            self.atm.notes_500 -= count
-        amount -= count * 500
+class CashHandler500(CashHandler):
+    def handle(self, amount: int, atm: 'ATM') -> None:
+        notes = min(amount // 500, atm.notes_500)
+        if notes:
+            print(f"Dispensing {notes} notes of 500")
+        amount -= notes * 500
         if self.next_handler:
-            self.next_handler.withdraw(amount)
+            self.next_handler.handle(amount, atm)
 
 
-class CashWithdrawHandler100(CashWithdrawHandler):
-    def withdraw(self, amount: int) -> None:
-        count = min(amount // 100, self.atm.notes_100)
-        if count > 0:
-            print(f"Dispensing {count} notes of ₹100")
-            self.atm.notes_100 -= count
-        amount -= count * 100
-        if amount > 0:
-            print("Cannot dispense remaining amount")
+class CashHandler100(CashHandler):
+    def handle(self, amount: int, atm: 'ATM') -> None:
+        notes = min(amount // 100, atm.notes_100)
+        if notes:
+            print(f"Dispensing {notes} notes of 100")
+        amount -= notes * 100
+        if amount:
+            print(f"Cannot dispense Rs.{amount} due to note unavailability")
 
 
-# --- ATM Class ---
+# --- ATM + Builder ---
 
 class ATM:
-    def __init__(self, user: User, total_cash: int, notes_2k: int, notes_500: int, notes_100: int) -> None:
+    def __init__(self, builder: 'ATMBuilder'):
+        self.user = builder.user
+        self.total_cash = builder.total_cash
+        self.notes_2k = builder.notes_2k
+        self.notes_500 = builder.notes_500
+        self.notes_100 = builder.notes_100
+
+        self.idle_state = IdleState()
+        self.has_card_state = HasCardState()
+        self.cash_withdraw_state = CashWithdrawState()
+        self.out_of_cash_state = OutOfCashState()
+
+        self.state: ATMState = self.idle_state if self.total_cash > 0 else self.out_of_cash_state
+
+    def set_state(self, new_state: ATMState) -> None:
+        self.state = new_state
+
+    def insert_card(self) -> None:
+        self.state.insert_card(self)
+
+    def enter_pin(self, pin: int) -> None:
+        self.state.authenticate_pin(self, pin)
+
+    def check_balance(self) -> None:
+        self.state.check_balance(self)
+
+    def withdraw_cash(self, amount: int) -> None:
+        self.state.withdraw_cash(self, amount)
+
+    def handle_cash(self, amount: int) -> None:
+        handler = CashHandler2K(CashHandler500(CashHandler100()))
+        handler.handle(amount, self)
+
+
+class ATMBuilder:
+    def __init__(self, user: User):
         self.user = user
-        self.machine_balance = total_cash
+        self.total_cash = 0
+        self.notes_2k = 0
+        self.notes_500 = 0
+        self.notes_100 = 0
+
+    def with_cash(self, total_cash: int) -> 'ATMBuilder':
+        self.total_cash = total_cash
+        return self
+
+    def with_notes(self, notes_2k: int, notes_500: int, notes_100: int) -> 'ATMBuilder':
         self.notes_2k = notes_2k
         self.notes_500 = notes_500
         self.notes_100 = notes_100
+        return self
 
-        self.idle_state: ATMState = IdleState()
-        self.has_card_state: ATMState = HasCardState()
-        self.cash_withdraw_state: ATMState = CashWithdrawState()
-        self.out_of_cash_state: ATMState = OutOfCashState()
-        self.curr_state: ATMState = self.idle_state if total_cash > 0 else self.out_of_cash_state
-
-    def set_state(self, state: ATMState) -> None:
-        self.curr_state = state
-
-    def insert_card(self) -> None:
-        self.curr_state.insert_card(self)
-
-    def enter_pin(self, pin: int) -> None:
-        self.curr_state.authenticate_pin(self, pin)
-
-    def check_balance(self) -> None:
-        self.curr_state.check_balance(self)
-
-    def withdraw_cash(self, amount: int) -> None:
-        self.curr_state.cash_withdraw(self, amount)
-
-    def eject_card(self) -> None:
-        self.curr_state.eject_card(self)
-
-    def handle_cash_dispense(self, amount: int) -> None:
-        chain = CashWithdrawHandler2K(self, CashWithdrawHandler500(self, CashWithdrawHandler100(self)))
-        chain.withdraw(amount)
+    def build(self) -> ATM:
+        return ATM(self)
 
 
-# --- Example Usage ---
-
-if __name__ == "__main__":
+# --- Simulation ---
+if __name__ == '__main__':
     account = BankAccount(50000)
-    card = ATMCard(cvv=123, pin=1111, bank_account=account)
-    user = User("John", card)
+    card = ATMCard(cvv=123, pin=1111, account=account)
+    user = User(name="John", card=card)
 
-    atm = ATM(user, total_cash=50000, notes_2k=10, notes_500=10, notes_100=10)
+    atm = ATMBuilder(user).with_cash(50000).with_notes(10, 10, 10).build()
 
     atm.insert_card()
     atm.enter_pin(1111)
     atm.check_balance()
     atm.withdraw_cash(4700)
-    atm.eject_card()
